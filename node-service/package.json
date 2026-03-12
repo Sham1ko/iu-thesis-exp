@@ -1,0 +1,13 @@
+{
+  "name": "node-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Node.js benchmark service mirroring go-service",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
