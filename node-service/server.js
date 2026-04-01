@@ -3,7 +3,7 @@ const os = require("os");
 
 const port = process.env.PORT || "8080";
 const startupTime = new Date();
-const hostname = os.hostname() || "unknown";
+const hostname = os.hostname();
 
 console.log(`startup timestamp: ${startupTime.toISOString()}`);
 
@@ -46,25 +46,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (url.pathname === "/healthz") {
-    if (req.method !== "GET") {
-      methodNotAllowed(res);
-      return;
-    }
-
-    res.writeHead(200);
-    res.end();
-    return;
-  }
-
   notFound(res);
-});
-
-const sockets = new Set();
-
-server.on("connection", (socket) => {
-  sockets.add(socket);
-  socket.on("close", () => sockets.delete(socket));
 });
 
 server.listen(Number(port), () => {
@@ -74,15 +56,7 @@ server.listen(Number(port), () => {
 const shutdown = (signal) => {
   console.log(`received ${signal}, shutting down`);
 
-  const forceCloseTimer = setTimeout(() => {
-    for (const socket of sockets) {
-      socket.destroy();
-    }
-  }, 5000);
-
   server.close((error) => {
-    clearTimeout(forceCloseTimer);
-
     if (error) {
       console.error(`graceful shutdown failed: ${error.message}`);
       process.exitCode = 1;
