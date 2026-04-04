@@ -1,12 +1,13 @@
 import { sendOneRequest } from "./send-one";
+import { reportRequestOnce } from "./request-once-report";
+
+// Run with: `pnpm run request-once`
+// Sends one request, measures client-side TTFB, and saves it to `results/ttfb_raw.csv` by default.
 
 async function main(): Promise<void> {
   const result = await sendOneRequest();
 
-  console.log(`status: ${result.status ?? "n/a"}`);
-  console.log(`elapsed_ms: ${result.elapsedMs}`);
-  console.log("body:");
-  console.log(result.bodyRaw);
+  await reportRequestOnce(result);
 
   if (!result.ok) {
     if (result.errorMessage) {

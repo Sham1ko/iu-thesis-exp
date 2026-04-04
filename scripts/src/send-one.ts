@@ -3,6 +3,7 @@ import { request, type RequestOptions } from "node:http";
 export type SendOneResult = {
   ok: boolean;
   status: number | null;
+  ttfbMs: number | null;
   elapsedMs: number;
   sentAt: string;
   receivedAt: string;
@@ -50,12 +51,13 @@ export async function sendOneRequest(): Promise<SendOneResult> {
       resolve(result);
     };
 
-    const fail = (message: string, status: number | null = null, bodyRaw = "") => {
+    const fail = (message: string, status: number | null = null, bodyRaw = "", ttfbMs: number | null = null) => {
       const finishedAtMs = Date.now();
 
       finish({
         ok: false,
         status,
+        ttfbMs,
         elapsedMs: finishedAtMs - startedAtMs,
         sentAt,
         receivedAt: new Date(finishedAtMs).toISOString(),
@@ -67,6 +69,7 @@ export async function sendOneRequest(): Promise<SendOneResult> {
 
     const req = request(REQUEST_OPTIONS, (res) => {
       let bodyRaw = "";
+      const ttfbMs = Date.now() - startedAtMs;
 
       res.setEncoding("utf8");
 
@@ -82,6 +85,7 @@ export async function sendOneRequest(): Promise<SendOneResult> {
         finish({
           ok,
           status,
+          ttfbMs,
           elapsedMs: finishedAtMs - startedAtMs,
           sentAt,
           receivedAt: new Date(finishedAtMs).toISOString(),
@@ -92,7 +96,7 @@ export async function sendOneRequest(): Promise<SendOneResult> {
       });
 
       res.on("error", (error) => {
-        fail(error.message, res.statusCode ?? null, bodyRaw);
+        fail(error.message, res.statusCode ?? null, bodyRaw, Date.now() - startedAtMs);
       });
     });
 
