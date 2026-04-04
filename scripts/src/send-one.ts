@@ -12,15 +12,29 @@ export type SendOneResult = {
   errorMessage: string | null;
 };
 
+function parsePositiveInteger(value: string | undefined, fallback: number): number {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return parsed;
+}
+
 const REQUEST_OPTIONS: RequestOptions = {
-  hostname: "127.0.0.1",
-  port: 8080,
-  path: "/ping",
+  hostname: process.env.REQUEST_HOSTNAME ?? "127.0.0.1",
+  port: parsePositiveInteger(process.env.REQUEST_PORT, 8080),
+  path: process.env.REQUEST_PATH ?? "/ping",
   method: "GET",
   headers: {
-    Host: "node-benchmark.default.127.0.0.1.sslip.io",
+    Host: process.env.REQUEST_HOST ?? "node-benchmark.default.127.0.0.1.sslip.io",
   },
-  timeout: 10_000,
+  timeout: parsePositiveInteger(process.env.REQUEST_TIMEOUT_MS, 10_000),
 };
 
 function safeParseJson(value: string): unknown | null {
