@@ -26,6 +26,8 @@ function parsePositiveInteger(value: string | undefined, fallback: number): numb
   return parsed;
 }
 
+const REQUEST_TIMEOUT_MS = parsePositiveInteger(process.env.REQUEST_TIMEOUT_MS, 10_000);
+
 const REQUEST_OPTIONS: RequestOptions = {
   hostname: process.env.REQUEST_HOSTNAME ?? "127.0.0.1",
   port: parsePositiveInteger(process.env.REQUEST_PORT, 8080),
@@ -34,7 +36,7 @@ const REQUEST_OPTIONS: RequestOptions = {
   headers: {
     Host: process.env.REQUEST_HOST ?? "node-benchmark.default.127.0.0.1.sslip.io",
   },
-  timeout: parsePositiveInteger(process.env.REQUEST_TIMEOUT_MS, 10_000),
+  timeout: REQUEST_TIMEOUT_MS,
 };
 
 function safeParseJson(value: string): unknown | null {
@@ -115,7 +117,7 @@ export async function sendOneRequest(): Promise<SendOneResult> {
     });
 
     req.on("timeout", () => {
-      req.destroy(new Error("Request timed out after 10000 ms"));
+      req.destroy(new Error(`Request timed out after ${REQUEST_TIMEOUT_MS} ms`));
     });
 
     req.on("error", (error) => {
