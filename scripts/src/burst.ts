@@ -1,10 +1,7 @@
-import path from "node:path";
-
-import { appendCsvRows, csvEscape } from "./csv-report";
+import { saveBurstMetrics } from "./request-metrics-report";
 import { sendOneRequest } from "./send-one";
 
 const DEFAULT_REQUEST_COUNT = 500;
-const RESULTS_FILE = process.env.RESULTS_FILE ?? path.join("results", "burst_raw.csv");
 
 function parsePositiveInteger(value: string | undefined, fallback: number): number {
   if (!value) {
@@ -40,23 +37,7 @@ async function main(): Promise<void> {
       result: await sendOneRequest(),
     })),
   );
-
-  const rows = results.map(({ requestId, result }) =>
-    [
-      csvEscape(runStartedAt),
-      csvEscape(requestId),
-      csvEscape(result.sentAt),
-      csvEscape(result.ttfbMs),
-      csvEscape(result.status),
-      csvEscape(result.errorMessage),
-    ].join(","),
-  );
-
-  const csvWritten = await appendCsvRows(
-    RESULTS_FILE,
-    "run_started_at,request_id,started_at,ttfb_ms,status_code,error",
-    rows,
-  );
+  const csvWritten = await saveBurstMetrics(runStartedAt, results);
 
   const ttfbValues = results
     .map(({ result }) => result.ttfbMs)

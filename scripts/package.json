@@ -4,7 +4,7 @@
     "description": "",
     "main": "index.js",
     "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1",
+        "test": "tsx src/request-metrics-report.test.ts",
         "request-once": "tsx src/request-once.ts",
         "burst": "tsx src/burst.ts",
         "sporadic": "tsx src/sporadic.ts"
