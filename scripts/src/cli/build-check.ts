@@ -2,6 +2,7 @@ import "./benchmark.ts";
 import "../commands/request-once.ts";
 import "../config/resolve-target.ts";
 import "../config/scenario-config.ts";
+import "../metrics/pod-startup-report.ts";
 import "../metrics/request-metrics-report.ts";
 import "../network/send-one.ts";
 import "../workloads/burst.ts";

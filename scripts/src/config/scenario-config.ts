@@ -85,3 +85,10 @@ export function getScenarioConfig(runtime: RuntimeName, strategy: StrategyName):
 export function getScenarioResultsFile(scenario: ScenarioConfig, workload: WorkloadName): string {
   return path.join("results", `${scenario.resultsFilePrefix}-${workload}_raw.csv`);
 }
+
+export function getScenarioPodStartupResultsFile(
+  scenario: ScenarioConfig,
+  workload: WorkloadName,
+): string {
+  return path.join("results", `${scenario.resultsFilePrefix}-${workload}_pod-startup.csv`);
+}

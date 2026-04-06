@@ -8,6 +8,11 @@ It lets you choose the full thesis scenario shape directly:
 - strategy: `min0` or `min1`
 - workload: `burst`, `sporadic`, or `steady`
 
+Each benchmark run now emits two raw artefacts:
+
+- request-level latency CSV for TTFB/P95/P99 inputs
+- platform-side pod startup CSV for pod creation-to-readiness observations
+
 Run commands from `scripts/package.json`:
 
 ```bash
@@ -26,6 +31,8 @@ The runner supports:
 - `--resolve-mode auto`: try `kubectl get ksvc ...` first, then fall back to env-based host derivation
 - `--resolve-mode kubectl`: require live Knative service resolution
 - `--resolve-mode env`: derive the host from env/config only
+
+For non-dry-run benchmark execution, `kubectl` access is effectively required because the runner also captures platform-side pod lifecycle metrics.
 
 Useful env vars:
 

@@ -18,6 +18,7 @@ export type SporadicResult = {
 export type RunSporadicOptions = {
   requestCount?: number;
   idleMs?: number;
+  runStartedAt?: string;
   target?: Partial<RequestTarget>;
   resultsFile?: string;
   log?: (message: string) => void;
@@ -97,7 +98,7 @@ export async function runSporadic(options: RunSporadicOptions = {}) {
   const log = options.log ?? console.log;
   const requestCount = options.requestCount ?? DEFAULT_REQUEST_COUNT;
   const idleMs = options.idleMs ?? DEFAULT_IDLE_MS;
-  const runStartedAt = new Date().toISOString();
+  const runStartedAt = options.runStartedAt ?? new Date().toISOString();
   const results = await collectSporadicResults(
     requestCount,
     idleMs,

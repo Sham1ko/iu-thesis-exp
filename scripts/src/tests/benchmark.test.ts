@@ -107,6 +107,7 @@ async function testResolveTargetViaKubectl(): Promise<void> {
 async function testRunBenchmarkDispatchAndDryRun(): Promise<void> {
   const logs: string[] = [];
   let burstCalled = false;
+  let measurementCalled = false;
 
   const dryRunResult = await runBenchmark(
     parseBenchmarkArgs([
@@ -136,16 +137,28 @@ async function testRunBenchmarkDispatchAndDryRun(): Promise<void> {
         burstCalled = true;
         return { csvWritten: "x", summary: { requestCount: 1 } };
       },
+      measurePodStartupDuring: async () => {
+        measurementCalled = true;
+        return {
+          workloadResult: { csvWritten: "x", summary: { requestCount: 1 } },
+          csvWritten: "platform.csv",
+          entries: [],
+          summary: { totalEvents: 0, readyEvents: 0, notReadyEvents: 0 },
+        };
+      },
     },
   );
 
   assert.equal(dryRunResult.kind, "dry-run");
   assert.equal(burstCalled, false);
+  assert.equal(measurementCalled, false);
   assert.ok(logs.some((line) => line === "service_name: go-benchmark"));
+  assert.ok(logs.some((line) => line === `platform_results_file: ${path.join("results", "go-min0-burst_pod-startup.csv")}`));
 
   let steadyCalled = false;
+  let receivedPlatformResultsFile: string | undefined;
 
-  await runBenchmark(
+  const benchmarkResult = await runBenchmark(
     parseBenchmarkArgs([
       "--runtime",
       "node",
@@ -172,6 +185,16 @@ async function testRunBenchmarkDispatchAndDryRun(): Promise<void> {
           timeoutMs: 10000,
         },
       }),
+      measurePodStartupDuring: async (workload, options) => {
+        receivedPlatformResultsFile = options.resultsFile;
+        const workloadResult = await workload();
+        return {
+          workloadResult,
+          csvWritten: "platform.csv",
+          entries: [],
+          summary: { totalEvents: 2, readyEvents: 1, notReadyEvents: 1 },
+        };
+      },
       runBurst: async () => {
         throw new Error("burst runner should not be called");
       },
@@ -183,12 +206,19 @@ async function testRunBenchmarkDispatchAndDryRun(): Promise<void> {
         assert.equal(options.requestCount, 5);
         assert.equal(options.intervalMs, 500);
         assert.equal(options.resultsFile, path.join("results", "node-min1-steady_raw.csv"));
+        assert.match(options.runStartedAt ?? "", /^\d{4}-\d{2}-\d{2}T/);
         return { csvWritten: "steady.csv", summary: { requestCount: 5 } };
       },
     },
   );
 
   assert.equal(steadyCalled, true);
+  assert.equal(receivedPlatformResultsFile, path.join("results", "node-min1-steady_pod-startup.csv"));
+  assert.deepEqual(benchmarkResult.podStartup.summary, {
+    totalEvents: 2,
+    readyEvents: 1,
+    notReadyEvents: 1,
+  });
 }
 
 async function main(): Promise<void> {

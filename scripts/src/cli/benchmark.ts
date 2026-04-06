@@ -1,6 +1,7 @@
 import { resolveBenchmarkTarget, type ResolvedTarget } from "../config/resolve-target.ts";
 import {
   getScenarioConfig,
+  getScenarioPodStartupResultsFile,
   getScenarioResultsFile,
   isResolveMode,
   isRuntimeName,
@@ -11,6 +12,7 @@ import {
   type StrategyName,
   type WorkloadName,
 } from "../config/scenario-config.ts";
+import { measurePodStartupDuring } from "../metrics/pod-startup-report.ts";
 import { runBurst } from "../workloads/burst.ts";
 import { runSporadic } from "../workloads/sporadic.ts";
 import { runSteady } from "../workloads/steady.ts";
@@ -35,6 +37,7 @@ type ParsedFlagValue = string | boolean;
 
 type BenchmarkDependencies = {
   resolveTarget?: typeof resolveBenchmarkTarget;
+  measurePodStartupDuring?: typeof measurePodStartupDuring;
   runBurst?: typeof runBurst;
   runSporadic?: typeof runSporadic;
   runSteady?: typeof runSteady;
@@ -120,6 +123,13 @@ function ensureRequiredString(
   return value;
 }
 
+function resolveBenchmarkNamespace(
+  options: BenchmarkCliOptions,
+  defaultNamespace: string,
+): string {
+  return options.namespace ?? process.env.BENCHMARK_NAMESPACE ?? defaultNamespace;
+}
+
 export function parseBenchmarkArgs(args: readonly string[]): BenchmarkCliOptions {
   const parsed = parseArgsToRecord(args);
 
@@ -198,6 +208,7 @@ export function formatResolvedTargetLines(
   resolvedTarget: ResolvedTarget,
   manifestPath: string,
   resultsFile: string,
+  platformResultsFile: string,
 ): string[] {
   return [
     "benchmark:",
@@ -212,6 +223,7 @@ export function formatResolvedTargetLines(
     `request_path: ${resolvedTarget.requestTarget.path}`,
     `host_header: ${resolvedTarget.requestTarget.hostHeader}`,
     `results_file: ${resultsFile}`,
+    `platform_results_file: ${platformResultsFile}`,
     `service_url: ${resolvedTarget.serviceUrl ?? "n/a"}`,
   ];
 }
@@ -222,6 +234,7 @@ export async function runBenchmark(
 ) {
   const log = dependencies.log ?? console.log;
   const scenario = getScenarioConfig(options.runtime, options.strategy);
+  const namespace = resolveBenchmarkNamespace(options, scenario.namespace);
   const resolvedTarget = await (dependencies.resolveTarget ?? resolveBenchmarkTarget)({
     scenario,
     mode: options.resolveMode,
@@ -229,8 +242,16 @@ export async function runBenchmark(
     pathOverride: options.path,
   });
   const resultsFile = getScenarioResultsFile(scenario, options.workload);
+  const platformResultsFile = getScenarioPodStartupResultsFile(scenario, options.workload);
+  const runStartedAt = new Date().toISOString();
 
-  for (const line of formatResolvedTargetLines(options, resolvedTarget, scenario.manifestPath, resultsFile)) {
+  for (const line of formatResolvedTargetLines(
+    options,
+    resolvedTarget,
+    scenario.manifestPath,
+    resultsFile,
+    platformResultsFile,
+  )) {
     log(line);
   }
 
@@ -240,36 +261,61 @@ export async function runBenchmark(
       scenario,
       resolvedTarget,
       resultsFile,
+      platformResultsFile,
     };
   }
 
-  if (options.workload === "burst") {
-    return (dependencies.runBurst ?? runBurst)({
+  const runWorkload = async () => {
+    if (options.workload === "burst") {
+      return (dependencies.runBurst ?? runBurst)({
+        requestCount: options.requestCount,
+        runStartedAt,
+        target: resolvedTarget.requestTarget,
+        resultsFile,
+        log,
+      });
+    }
+
+    if (options.workload === "sporadic") {
+      return (dependencies.runSporadic ?? runSporadic)({
+        requestCount: options.requestCount,
+        idleMs: options.idleMs,
+        runStartedAt,
+        target: resolvedTarget.requestTarget,
+        resultsFile,
+        log,
+      });
+    }
+
+    return (dependencies.runSteady ?? runSteady)({
       requestCount: options.requestCount,
+      intervalMs: options.intervalMs,
+      durationMs: options.durationMs,
+      runStartedAt,
       target: resolvedTarget.requestTarget,
       resultsFile,
       log,
     });
-  }
+  };
 
-  if (options.workload === "sporadic") {
-    return (dependencies.runSporadic ?? runSporadic)({
-      requestCount: options.requestCount,
-      idleMs: options.idleMs,
-      target: resolvedTarget.requestTarget,
-      resultsFile,
-      log,
-    });
-  }
-
-  return (dependencies.runSteady ?? runSteady)({
-    requestCount: options.requestCount,
-    intervalMs: options.intervalMs,
-    durationMs: options.durationMs,
-    target: resolvedTarget.requestTarget,
-    resultsFile,
-    log,
+  const measurement = await (dependencies.measurePodStartupDuring ?? measurePodStartupDuring)(runWorkload, {
+    runStartedAt,
+    serviceName: resolvedTarget.serviceName,
+    namespace,
+    resultsFile: platformResultsFile,
   });
+
+  log(`pod_startup_events: ${measurement.summary.totalEvents}`);
+  log(`pod_startup_ready_events: ${measurement.summary.readyEvents}`);
+
+  return {
+    ...measurement.workloadResult,
+    podStartup: {
+      csvWritten: measurement.csvWritten,
+      summary: measurement.summary,
+      entries: measurement.entries,
+    },
+  };
 }
 
 async function main(): Promise<void> {

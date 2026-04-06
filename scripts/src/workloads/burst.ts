@@ -11,6 +11,7 @@ export type BurstResult = {
 
 export type RunBurstOptions = {
   requestCount?: number;
+  runStartedAt?: string;
   target?: Partial<RequestTarget>;
   resultsFile?: string;
   log?: (message: string) => void;
@@ -61,7 +62,7 @@ export function summarizeBurstResults(requestCount: number, results: readonly Bu
 export async function runBurst(options: RunBurstOptions = {}) {
   const log = options.log ?? console.log;
   const requestCount = options.requestCount ?? DEFAULT_REQUEST_COUNT;
-  const runStartedAt = new Date().toISOString();
+  const runStartedAt = options.runStartedAt ?? new Date().toISOString();
 
   const results = await Promise.all(
     Array.from({ length: requestCount }, async (_, index) => ({

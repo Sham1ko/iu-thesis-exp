@@ -6,7 +6,7 @@
     "main": "index.js",
     "scripts": {
         "check:modules": "node --experimental-strip-types src/cli/build-check.ts",
-        "test": "node --experimental-strip-types src/tests/request-metrics-report.test.ts && node --experimental-strip-types src/tests/benchmark.test.ts",
+        "test": "node --experimental-strip-types src/tests/request-metrics-report.test.ts && node --experimental-strip-types src/tests/pod-startup-report.test.ts && node --experimental-strip-types src/tests/benchmark.test.ts",
         "benchmark": "node --experimental-strip-types src/cli/benchmark.ts",
         "request-once": "node --experimental-strip-types src/commands/request-once.ts",
         "burst": "node --experimental-strip-types src/workloads/burst.ts",

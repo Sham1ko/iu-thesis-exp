@@ -19,6 +19,7 @@ export type RunSteadyOptions = {
   intervalMs?: number;
   durationMs?: number;
   requestCount?: number;
+  runStartedAt?: string;
   target?: Partial<RequestTarget>;
   resultsFile?: string;
   log?: (message: string) => void;
@@ -118,7 +119,7 @@ export async function runSteady(options: RunSteadyOptions = {}) {
   const log = options.log ?? console.log;
   const intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
   const durationMs = options.requestCount === undefined ? (options.durationMs ?? DEFAULT_DURATION_MS) : options.durationMs;
-  const runStartedAt = new Date().toISOString();
+  const runStartedAt = options.runStartedAt ?? new Date().toISOString();
   const results = await collectSteadyResults(
     intervalMs,
     durationMs,
