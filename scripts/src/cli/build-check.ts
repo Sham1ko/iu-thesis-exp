@@ -8,4 +8,4 @@ import "../workloads/burst.ts";
 import "../workloads/sporadic.ts";
 import "../workloads/steady.ts";
 
-console.log("build check passed");
+console.log("module load check passed");

@@ -11,10 +11,13 @@ It lets you choose the full thesis scenario shape directly:
 Run commands from `scripts/package.json`:
 
 ```bash
+pnpm run check:modules
 pnpm run benchmark -- --runtime go --strategy min0 --workload burst --dry-run
 pnpm run benchmark -- --runtime node --strategy min1 --workload sporadic --requests 5 --idle-ms 30000
 pnpm run benchmark -- --runtime go --strategy min1 --workload steady --interval-ms 1000 --duration-ms 30000
 ```
+
+`pnpm run check:modules` is not a real build. It is a fast module-load smoke check that imports the key TypeScript entrypoints and catches broken imports or structural mistakes after refactors.
 
 ## Target Resolution
 
@@ -64,3 +67,6 @@ Use them when you already want to work at the workload-module level. For normal 
 
 - The benchmark runner targets already-deployed Knative services. It does not own deployment/bootstrap.
 - `node-service/deploy-kind.sh` is still a separate Node-focused bootstrap path, not the generic benchmark orchestrator.
+- For verification, use:
+  - `pnpm run check:modules` for a quick module/import smoke check
+  - `pnpm test` for parser, mapping, and metrics regression tests
