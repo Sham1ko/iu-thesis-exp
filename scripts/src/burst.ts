@@ -1,7 +1,21 @@
-import { saveBurstMetrics } from "./request-metrics-report";
-import { sendOneRequest } from "./send-one";
+import { saveBurstMetrics } from "./request-metrics-report.ts";
+import { runCli } from "./script-entry.ts";
+import { sendOneRequest, type RequestTarget, type SendOneResult } from "./send-one.ts";
 
 const DEFAULT_REQUEST_COUNT = 500;
+
+export type BurstResult = {
+  requestId: number;
+  result: SendOneResult;
+};
+
+export type RunBurstOptions = {
+  requestCount?: number;
+  target?: Partial<RequestTarget>;
+  resultsFile?: string;
+  log?: (message: string) => void;
+  requestOne?: (target?: Partial<RequestTarget>) => Promise<SendOneResult>;
+};
 
 function parsePositiveInteger(value: string | undefined, fallback: number): number {
   if (!value) {
@@ -27,18 +41,7 @@ function percentile(values: number[], fraction: number): number | null {
   return sorted[index];
 }
 
-async function main(): Promise<void> {
-  const requestCount = parsePositiveInteger(process.env.BURST_REQUESTS, DEFAULT_REQUEST_COUNT);
-  const runStartedAt = new Date().toISOString();
-
-  const results = await Promise.all(
-    Array.from({ length: requestCount }, async (_, index) => ({
-      requestId: index + 1,
-      result: await sendOneRequest(),
-    })),
-  );
-  const csvWritten = await saveBurstMetrics(runStartedAt, results);
-
+export function summarizeBurstResults(requestCount: number, results: readonly BurstResult[]) {
   const ttfbValues = results
     .map(({ result }) => result.ttfbMs)
     .filter((value): value is number => value !== null);
@@ -46,21 +49,55 @@ async function main(): Promise<void> {
   const successCount = results.filter(({ result }) => result.ok).length;
   const failureCount = results.length - successCount;
 
-  console.log("scenario: burst");
-  console.log(`requests: ${requestCount}`);
-  console.log(`successful_requests: ${successCount}`);
-  console.log(`failed_requests: ${failureCount}`);
-  console.log(`p95_ttfb_ms: ${percentile(ttfbValues, 0.95) ?? "n/a"}`);
-  console.log(`p99_ttfb_ms: ${percentile(ttfbValues, 0.99) ?? "n/a"}`);
-  console.log(`csv_written: ${csvWritten}`);
-
-  if (failureCount > 0) {
-    process.exitCode = 1;
-  }
+  return {
+    requestCount,
+    successCount,
+    failureCount,
+    p95TtfbMs: percentile(ttfbValues, 0.95),
+    p99TtfbMs: percentile(ttfbValues, 0.99),
+  };
 }
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(`burst scenario failed: ${message}`);
-  process.exitCode = 1;
-});
+export async function runBurst(options: RunBurstOptions = {}) {
+  const log = options.log ?? console.log;
+  const requestCount = options.requestCount ?? DEFAULT_REQUEST_COUNT;
+  const runStartedAt = new Date().toISOString();
+
+  const results = await Promise.all(
+    Array.from({ length: requestCount }, async (_, index) => ({
+      requestId: index + 1,
+      result: await (options.requestOne ?? sendOneRequest)(options.target),
+    })),
+  );
+  const csvWritten = await saveBurstMetrics(runStartedAt, results, { resultsFile: options.resultsFile });
+  const summary = summarizeBurstResults(requestCount, results);
+
+  log("scenario: burst");
+  log(`requests: ${summary.requestCount}`);
+  log(`successful_requests: ${summary.successCount}`);
+  log(`failed_requests: ${summary.failureCount}`);
+  log(`p95_ttfb_ms: ${summary.p95TtfbMs ?? "n/a"}`);
+  log(`p99_ttfb_ms: ${summary.p99TtfbMs ?? "n/a"}`);
+  log(`csv_written: ${csvWritten}`);
+
+  if (summary.failureCount > 0) {
+    process.exitCode = 1;
+  }
+
+  return { csvWritten, summary };
+}
+
+async function main(): Promise<void> {
+  await runBurst({
+    requestCount: parsePositiveInteger(process.env.BURST_REQUESTS, DEFAULT_REQUEST_COUNT),
+  });
+}
+
+runCli(async () => {
+  try {
+    await main();
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`burst scenario failed: ${message}`);
+  }
+}, import.meta.url);

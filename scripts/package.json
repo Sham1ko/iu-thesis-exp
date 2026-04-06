@@ -2,12 +2,16 @@
     "name": "scripts",
     "version": "1.0.0",
     "description": "",
+    "type": "module",
     "main": "index.js",
     "scripts": {
-        "test": "tsx src/request-metrics-report.test.ts",
-        "request-once": "tsx src/request-once.ts",
-        "burst": "tsx src/burst.ts",
-        "sporadic": "tsx src/sporadic.ts"
+        "build": "node --experimental-strip-types src/build-check.ts",
+        "test": "node --experimental-strip-types src/request-metrics-report.test.ts && node --experimental-strip-types src/benchmark.test.ts",
+        "benchmark": "node --experimental-strip-types src/benchmark.ts",
+        "request-once": "node --experimental-strip-types src/request-once.ts",
+        "burst": "node --experimental-strip-types src/burst.ts",
+        "sporadic": "node --experimental-strip-types src/sporadic.ts",
+        "steady": "node --experimental-strip-types src/steady.ts"
     },
     "keywords": [],
     "author": "",

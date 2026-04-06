@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   collectSporadicResults,
   summarizeSporadicResults,
-} from "./sporadic";
+} from "./sporadic.ts";
 import {
   BURST_CSV_HEADER,
   createBurstMetricReport,
@@ -11,8 +11,10 @@ import {
   createSporadicMetricReport,
   REQUEST_ONCE_CSV_HEADER,
   SPORADIC_CSV_HEADER,
-} from "./request-metrics-report";
-import type { SendOneResult } from "./send-one";
+  STEADY_CSV_HEADER,
+  createSteadyMetricReport,
+} from "./request-metrics-report.ts";
+import type { SendOneResult } from "./send-one.ts";
 
 function createResult(overrides: Partial<SendOneResult> = {}): SendOneResult {
   return {
@@ -37,6 +39,7 @@ async function testCollectSporadicResults(): Promise<void> {
     3,
     30_000,
     async () => createResult({ ttfbMs: 100 + callCount++ }),
+    undefined,
     async (ms) => {
       waitCalls.push(ms);
     },
@@ -86,6 +89,15 @@ function testBuildRequestOnceRow(): void {
   assert.deepEqual(report.rows, ["1,2026-04-05T10:00:00.000Z,123,200,"]);
 }
 
+function testBuildSteadyRows(): void {
+  const report = createSteadyMetricReport("2026-04-05T09:59:00.000Z", [
+    { requestId: 3, intervalMs: 1000, result: createResult() },
+  ]);
+
+  assert.equal(report.header, STEADY_CSV_HEADER);
+  assert.deepEqual(report.rows, ["2026-04-05T09:59:00.000Z,3,1000,2026-04-05T10:00:00.000Z,123,200,"]);
+}
+
 function testSummarizeSporadicResults(): void {
   const summary = summarizeSporadicResults(4, 30_000, [
     { requestId: 1, idleBeforeMs: 0, result: createResult({ ttfbMs: 100 }) },
@@ -118,6 +130,7 @@ async function main(): Promise<void> {
   testBuildSporadicRows();
   testBuildBurstRows();
   testBuildRequestOnceRow();
+  testBuildSteadyRows();
   testSummarizeSporadicResults();
   console.log("request metrics tests passed");
 }

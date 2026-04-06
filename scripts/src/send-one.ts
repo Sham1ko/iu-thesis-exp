@@ -1,5 +1,13 @@
 import { request, type RequestOptions } from "node:http";
 
+export type RequestTarget = {
+  hostname: string;
+  port: number;
+  path: string;
+  hostHeader: string;
+  timeoutMs: number;
+};
+
 export type SendOneResult = {
   ok: boolean;
   status: number | null;
@@ -26,18 +34,15 @@ function parsePositiveInteger(value: string | undefined, fallback: number): numb
   return parsed;
 }
 
-const REQUEST_TIMEOUT_MS = parsePositiveInteger(process.env.REQUEST_TIMEOUT_MS, 10_000);
-
-const REQUEST_OPTIONS: RequestOptions = {
-  hostname: process.env.REQUEST_HOSTNAME ?? "127.0.0.1",
-  port: parsePositiveInteger(process.env.REQUEST_PORT, 8080),
-  path: process.env.REQUEST_PATH ?? "/ping",
-  method: "GET",
-  headers: {
-    Host: process.env.REQUEST_HOST ?? "node-benchmark.default.127.0.0.1.sslip.io",
-  },
-  timeout: REQUEST_TIMEOUT_MS,
-};
+export function resolveRequestTarget(overrides: Partial<RequestTarget> = {}): RequestTarget {
+  return {
+    hostname: overrides.hostname ?? process.env.REQUEST_HOSTNAME ?? "127.0.0.1",
+    port: overrides.port ?? parsePositiveInteger(process.env.REQUEST_PORT, 8080),
+    path: overrides.path ?? process.env.REQUEST_PATH ?? "/ping",
+    hostHeader: overrides.hostHeader ?? process.env.REQUEST_HOST ?? "node-benchmark.default.127.0.0.1.sslip.io",
+    timeoutMs: overrides.timeoutMs ?? parsePositiveInteger(process.env.REQUEST_TIMEOUT_MS, 10_000),
+  };
+}
 
 function safeParseJson(value: string): unknown | null {
   if (!value) {
@@ -51,7 +56,8 @@ function safeParseJson(value: string): unknown | null {
   }
 }
 
-export async function sendOneRequest(): Promise<SendOneResult> {
+export async function sendOneRequest(targetOverrides: Partial<RequestTarget> = {}): Promise<SendOneResult> {
+  const target = resolveRequestTarget(targetOverrides);
   const startedAtMs = Date.now();
   const sentAt = new Date(startedAtMs).toISOString();
 
@@ -83,7 +89,18 @@ export async function sendOneRequest(): Promise<SendOneResult> {
       });
     };
 
-    const req = request(REQUEST_OPTIONS, (res) => {
+    const requestOptions: RequestOptions = {
+      hostname: target.hostname,
+      port: target.port,
+      path: target.path,
+      method: "GET",
+      headers: {
+        Host: target.hostHeader,
+      },
+      timeout: target.timeoutMs,
+    };
+
+    const req = request(requestOptions, (res) => {
       let bodyRaw = "";
       const ttfbMs = Date.now() - startedAtMs;
 
@@ -117,7 +134,7 @@ export async function sendOneRequest(): Promise<SendOneResult> {
     });
 
     req.on("timeout", () => {
-      req.destroy(new Error(`Request timed out after ${REQUEST_TIMEOUT_MS} ms`));
+      req.destroy(new Error(`Request timed out after ${target.timeoutMs} ms`));
     });
 
     req.on("error", (error) => {

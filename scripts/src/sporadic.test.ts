@@ -1,1 +1,1 @@
-import "./request-metrics-report.test";
+import "./request-metrics-report.test.ts";
