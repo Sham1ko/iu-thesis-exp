@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import type { RequestTarget } from "./send-one.ts";
+import type { RequestTarget } from "../network/send-one.ts";
 import type { ResolveMode, ScenarioConfig } from "./scenario-config.ts";
 
 type ExecFileLike = (

@@ -1,5 +1,4 @@
-import { runBurst } from "./burst.ts";
-import { resolveBenchmarkTarget, type ResolvedTarget } from "./resolve-target.ts";
+import { resolveBenchmarkTarget, type ResolvedTarget } from "../config/resolve-target.ts";
 import {
   getScenarioConfig,
   getScenarioResultsFile,
@@ -11,10 +10,11 @@ import {
   type RuntimeName,
   type StrategyName,
   type WorkloadName,
-} from "./scenario-config.ts";
+} from "../config/scenario-config.ts";
+import { runBurst } from "../workloads/burst.ts";
+import { runSporadic } from "../workloads/sporadic.ts";
+import { runSteady } from "../workloads/steady.ts";
 import { runCli } from "./script-entry.ts";
-import { runSporadic } from "./sporadic.ts";
-import { runSteady } from "./steady.ts";
 
 export type BenchmarkCliOptions = {
   runtime: RuntimeName;

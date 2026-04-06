@@ -5,13 +5,13 @@
     "type": "module",
     "main": "index.js",
     "scripts": {
-        "build": "node --experimental-strip-types src/build-check.ts",
-        "test": "node --experimental-strip-types src/request-metrics-report.test.ts && node --experimental-strip-types src/benchmark.test.ts",
-        "benchmark": "node --experimental-strip-types src/benchmark.ts",
-        "request-once": "node --experimental-strip-types src/request-once.ts",
-        "burst": "node --experimental-strip-types src/burst.ts",
-        "sporadic": "node --experimental-strip-types src/sporadic.ts",
-        "steady": "node --experimental-strip-types src/steady.ts"
+        "build": "node --experimental-strip-types src/cli/build-check.ts",
+        "test": "node --experimental-strip-types src/tests/request-metrics-report.test.ts && node --experimental-strip-types src/tests/benchmark.test.ts",
+        "benchmark": "node --experimental-strip-types src/cli/benchmark.ts",
+        "request-once": "node --experimental-strip-types src/commands/request-once.ts",
+        "burst": "node --experimental-strip-types src/workloads/burst.ts",
+        "sporadic": "node --experimental-strip-types src/workloads/sporadic.ts",
+        "steady": "node --experimental-strip-types src/workloads/steady.ts"
     },
     "keywords": [],
     "author": "",

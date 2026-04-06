@@ -1,5 +1,5 @@
 import { saveRequestOnceMetric } from "./request-metrics-report.ts";
-import type { SendOneResult } from "./send-one.ts";
+import type { SendOneResult } from "../network/send-one.ts";
 
 export async function reportRequestOnce(result: SendOneResult): Promise<void> {
   const csvWritten = await saveRequestOnceMetric(result);

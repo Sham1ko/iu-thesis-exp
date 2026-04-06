@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import { appendCsvRows, csvEscape } from "./csv-report.ts";
-import type { SendOneResult } from "./send-one.ts";
+import type { SendOneResult } from "../network/send-one.ts";
 
 export type BurstMetricEntry = {
   requestId: number;

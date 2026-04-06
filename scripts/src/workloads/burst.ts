@@ -1,6 +1,6 @@
-import { saveBurstMetrics } from "./request-metrics-report.ts";
-import { runCli } from "./script-entry.ts";
-import { sendOneRequest, type RequestTarget, type SendOneResult } from "./send-one.ts";
+import { runCli } from "../cli/script-entry.ts";
+import { saveBurstMetrics } from "../metrics/request-metrics-report.ts";
+import { sendOneRequest, type RequestTarget, type SendOneResult } from "../network/send-one.ts";
 
 const DEFAULT_REQUEST_COUNT = 500;
 

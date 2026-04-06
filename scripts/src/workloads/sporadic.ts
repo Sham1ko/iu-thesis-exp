@@ -1,30 +1,28 @@
 import { setTimeout as delay } from "node:timers/promises";
 
-import { saveSteadyMetrics } from "./request-metrics-report.ts";
-import { sendOneRequest, type RequestTarget, type SendOneResult } from "./send-one.ts";
-import { runCli } from "./script-entry.ts";
+import { runCli } from "../cli/script-entry.ts";
+import { saveSporadicMetrics } from "../metrics/request-metrics-report.ts";
+import { sendOneRequest, type RequestTarget, type SendOneResult } from "../network/send-one.ts";
 
-const DEFAULT_INTERVAL_MS = 1_000;
-const DEFAULT_DURATION_MS = 30_000;
+const DEFAULT_REQUEST_COUNT = 5;
+const DEFAULT_IDLE_MS = 30_000;
 
 type WaitFn = (ms: number) => Promise<unknown>;
 
-export type SteadyResult = {
+export type SporadicResult = {
   requestId: number;
-  intervalMs: number;
+  idleBeforeMs: number;
   result: SendOneResult;
 };
 
-export type RunSteadyOptions = {
-  intervalMs?: number;
-  durationMs?: number;
+export type RunSporadicOptions = {
   requestCount?: number;
+  idleMs?: number;
   target?: Partial<RequestTarget>;
   resultsFile?: string;
   log?: (message: string) => void;
   requestOne?: (target?: Partial<RequestTarget>) => Promise<SendOneResult>;
   wait?: WaitFn;
-  now?: () => number;
 };
 
 function parsePositiveInteger(value: string | undefined, fallback: number): number {
@@ -51,39 +49,25 @@ function percentile(values: number[], fraction: number): number | null {
   return sorted[index];
 }
 
-export async function collectSteadyResults(
-  intervalMs: number,
-  durationMs: number | undefined,
-  requestCount: number | undefined,
+export async function collectSporadicResults(
+  requestCount: number,
+  idleMs: number,
   requestOne: (target?: Partial<RequestTarget>) => Promise<SendOneResult> = sendOneRequest,
   target: Partial<RequestTarget> | undefined = undefined,
   wait: WaitFn = delay,
-  now: () => number = Date.now,
-): Promise<SteadyResult[]> {
-  const results: SteadyResult[] = [];
-  const startedAtMs = now();
+): Promise<SporadicResult[]> {
+  const results: SporadicResult[] = [];
 
-  for (let index = 0; ; index += 1) {
-    if (requestCount !== undefined && index >= requestCount) {
-      break;
-    }
+  for (let index = 0; index < requestCount; index += 1) {
+    const idleBeforeMs = index === 0 ? 0 : idleMs;
 
-    const scheduledOffsetMs = index * intervalMs;
-
-    if (durationMs !== undefined && scheduledOffsetMs > durationMs) {
-      break;
-    }
-
-    const scheduledAtMs = startedAtMs + scheduledOffsetMs;
-    const waitMs = Math.max(0, scheduledAtMs - now());
-
-    if (waitMs > 0) {
-      await wait(waitMs);
+    if (idleBeforeMs > 0) {
+      await wait(idleBeforeMs);
     }
 
     results.push({
       requestId: index + 1,
-      intervalMs,
+      idleBeforeMs,
       result: await requestOne(target),
     });
   }
@@ -91,11 +75,7 @@ export async function collectSteadyResults(
   return results;
 }
 
-export function summarizeSteadyResults(
-  intervalMs: number,
-  durationMs: number | undefined,
-  results: readonly SteadyResult[],
-) {
+export function summarizeSporadicResults(requestCount: number, idleMs: number, results: readonly SporadicResult[]) {
   const ttfbValues = results
     .map(({ result }) => result.ttfbMs)
     .filter((value): value is number => value !== null);
@@ -104,9 +84,8 @@ export function summarizeSteadyResults(
   const failureCount = results.length - successCount;
 
   return {
-    requestCount: results.length,
-    intervalMs,
-    durationMs,
+    requestCount,
+    idleMs,
     successCount,
     failureCount,
     p95TtfbMs: percentile(ttfbValues, 0.95),
@@ -114,27 +93,24 @@ export function summarizeSteadyResults(
   };
 }
 
-export async function runSteady(options: RunSteadyOptions = {}) {
+export async function runSporadic(options: RunSporadicOptions = {}) {
   const log = options.log ?? console.log;
-  const intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
-  const durationMs = options.requestCount === undefined ? (options.durationMs ?? DEFAULT_DURATION_MS) : options.durationMs;
+  const requestCount = options.requestCount ?? DEFAULT_REQUEST_COUNT;
+  const idleMs = options.idleMs ?? DEFAULT_IDLE_MS;
   const runStartedAt = new Date().toISOString();
-  const results = await collectSteadyResults(
-    intervalMs,
-    durationMs,
-    options.requestCount,
+  const results = await collectSporadicResults(
+    requestCount,
+    idleMs,
     options.requestOne ?? sendOneRequest,
     options.target,
     options.wait ?? delay,
-    options.now ?? Date.now,
   );
-  const csvWritten = await saveSteadyMetrics(runStartedAt, results, { resultsFile: options.resultsFile });
-  const summary = summarizeSteadyResults(intervalMs, durationMs, results);
+  const csvWritten = await saveSporadicMetrics(runStartedAt, results, { resultsFile: options.resultsFile });
+  const summary = summarizeSporadicResults(requestCount, idleMs, results);
 
-  log("scenario: steady");
+  log("scenario: sporadic");
   log(`requests: ${summary.requestCount}`);
-  log(`interval_ms: ${summary.intervalMs}`);
-  log(`duration_ms: ${summary.durationMs ?? "n/a"}`);
+  log(`idle_ms_between_requests: ${summary.idleMs}`);
   log(`successful_requests: ${summary.successCount}`);
   log(`failed_requests: ${summary.failureCount}`);
   log(`p95_ttfb_ms: ${summary.p95TtfbMs ?? "n/a"}`);
@@ -149,10 +125,9 @@ export async function runSteady(options: RunSteadyOptions = {}) {
 }
 
 async function main(): Promise<void> {
-  await runSteady({
-    intervalMs: parsePositiveInteger(process.env.STEADY_INTERVAL_MS, DEFAULT_INTERVAL_MS),
-    durationMs: parsePositiveInteger(process.env.STEADY_DURATION_MS, DEFAULT_DURATION_MS),
-    requestCount: process.env.STEADY_REQUESTS ? parsePositiveInteger(process.env.STEADY_REQUESTS, 1) : undefined,
+  await runSporadic({
+    requestCount: parsePositiveInteger(process.env.SPORADIC_REQUESTS, DEFAULT_REQUEST_COUNT),
+    idleMs: parsePositiveInteger(process.env.SPORADIC_IDLE_MS, DEFAULT_IDLE_MS),
   });
 }
 
@@ -161,6 +136,6 @@ runCli(async () => {
     await main();
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`steady scenario failed: ${message}`);
+    throw new Error(`sporadic scenario failed: ${message}`);
   }
 }, import.meta.url);

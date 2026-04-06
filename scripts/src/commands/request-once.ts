@@ -1,6 +1,6 @@
-import { reportRequestOnce } from "./request-once-report.ts";
-import { runCli } from "./script-entry.ts";
-import { sendOneRequest, type RequestTarget } from "./send-one.ts";
+import { runCli } from "../cli/script-entry.ts";
+import { reportRequestOnce } from "../metrics/request-once-report.ts";
+import { sendOneRequest, type RequestTarget } from "../network/send-one.ts";
 
 // Run with: `pnpm run request-once`
 // Sends one request, measures client-side TTFB, and saves it to `results/ttfb_raw.csv` by default.

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 
-import { parseBenchmarkArgs, runBenchmark } from "./benchmark.ts";
-import { getScenarioConfig } from "./scenario-config.ts";
-import { deriveServiceHost, resolveBenchmarkTarget } from "./resolve-target.ts";
+import { parseBenchmarkArgs, runBenchmark } from "../cli/benchmark.ts";
+import { getScenarioConfig } from "../config/scenario-config.ts";
+import { deriveServiceHost, resolveBenchmarkTarget } from "../config/resolve-target.ts";
 
 async function testParseBenchmarkArgs(): Promise<void> {
   const options = parseBenchmarkArgs([

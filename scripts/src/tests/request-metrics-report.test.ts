@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   collectSporadicResults,
   summarizeSporadicResults,
-} from "./sporadic.ts";
+} from "../workloads/sporadic.ts";
 import {
   BURST_CSV_HEADER,
   createBurstMetricReport,
@@ -13,8 +13,8 @@ import {
   SPORADIC_CSV_HEADER,
   STEADY_CSV_HEADER,
   createSteadyMetricReport,
-} from "./request-metrics-report.ts";
-import type { SendOneResult } from "./send-one.ts";
+} from "../metrics/request-metrics-report.ts";
+import type { SendOneResult } from "../network/send-one.ts";
 
 function createResult(overrides: Partial<SendOneResult> = {}): SendOneResult {
   return {
