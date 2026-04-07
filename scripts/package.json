@@ -8,10 +8,7 @@
         "check:modules": "node --experimental-strip-types src/cli/build-check.ts",
         "test": "node --experimental-strip-types src/tests/request-metrics-report.test.ts && node --experimental-strip-types src/tests/pod-startup-report.test.ts && node --experimental-strip-types src/tests/benchmark.test.ts",
         "benchmark": "node --experimental-strip-types src/cli/benchmark.ts",
-        "request-once": "node --experimental-strip-types src/commands/request-once.ts",
-        "burst": "node --experimental-strip-types src/workloads/burst.ts",
-        "sporadic": "node --experimental-strip-types src/workloads/sporadic.ts",
-        "steady": "node --experimental-strip-types src/workloads/steady.ts"
+        "request-once": "node --experimental-strip-types src/commands/request-once.ts"
     },
     "keywords": [],
     "author": "",
@@ -19,6 +16,7 @@
     "packageManager": "pnpm@10.33.0",
     "devDependencies": {
         "@types/node": "^25.5.2",
+        "jest": "^30.3.0",
         "tsx": "^3.12.7"
     }
 }

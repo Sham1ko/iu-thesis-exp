@@ -57,18 +57,15 @@ When `REQUEST_HOST` is not set, env mode derives the host header as:
 - `sporadic`: idle gap before requests after the first, controlled by `--idle-ms`
 - `steady`: sustained cadence without long idle gaps, controlled by `--interval-ms` and bounded by `--duration-ms` or `--requests`
 
-## Advanced Direct Entrypoints
+## Direct Utilities
 
-The old direct scripts remain available as advanced entrypoints:
+Only the one-off request helper remains as a direct utility:
 
 ```bash
 pnpm run request-once
-pnpm run burst
-pnpm run sporadic
-pnpm run steady
 ```
 
-Use them when you already want to work at the workload-module level. For normal scenario execution, prefer `pnpm run benchmark -- ...`.
+For normal workload execution, use `pnpm run benchmark -- ...`.
 
 ## Notes
 

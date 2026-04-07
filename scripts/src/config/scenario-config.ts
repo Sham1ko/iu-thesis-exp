@@ -28,7 +28,7 @@ const SCENARIO_CATALOG: Record<RuntimeName, Record<StrategyName, ScenarioConfig>
     min0: {
       runtime: "go",
       strategy: "min0",
-      serviceName: "go-benchmark",
+      serviceName: "go-benchmark-min0",
       manifestPath: path.resolve(REPO_ROOT, "go-service", "go-min0.yaml"),
       namespace: DEFAULT_NAMESPACE,
       resultsFilePrefix: "go-min0",
@@ -36,7 +36,7 @@ const SCENARIO_CATALOG: Record<RuntimeName, Record<StrategyName, ScenarioConfig>
     min1: {
       runtime: "go",
       strategy: "min1",
-      serviceName: "go-min-1",
+      serviceName: "go-benchmark-min1",
       manifestPath: path.resolve(REPO_ROOT, "go-service", "go-min1.yaml"),
       namespace: DEFAULT_NAMESPACE,
       resultsFilePrefix: "go-min1",
