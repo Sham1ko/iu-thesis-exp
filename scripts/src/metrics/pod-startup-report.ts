@@ -17,6 +17,22 @@ type PodCondition = {
   lastTransitionTime?: string;
 };
 
+type PodContainerState = {
+  startedAt?: string;
+};
+
+type PodContainerStatus = {
+  name?: string;
+  state?: {
+    running?: PodContainerState;
+    terminated?: PodContainerState;
+  };
+  lastState?: {
+    running?: PodContainerState;
+    terminated?: PodContainerState;
+  };
+};
+
 type PodSnapshotItem = {
   metadata?: {
     uid?: string;
@@ -27,6 +43,7 @@ type PodSnapshotItem = {
   status?: {
     phase?: string;
     conditions?: PodCondition[];
+    containerStatuses?: PodContainerStatus[];
   };
 };
 
@@ -45,7 +62,13 @@ export type ObservedPod = {
   podName: string;
   revisionName: string;
   createdAt: string;
-  readyAt: string | null;
+  firstObservedAt: string;
+  podScheduledAt: string | null;
+  podReadyToStartContainersAt: string | null;
+  userContainerStartedAt: string | null;
+  queueProxyStartedAt: string | null;
+  containersReadyAt: string | null;
+  podReadyAt: string | null;
   terminal: boolean;
 };
 
@@ -58,6 +81,20 @@ export type PodStartupRow = {
   podUid: string;
   createdAt: string;
   readyAt: string | null;
+  podCreatedAt: string;
+  podFirstObservedAt: string;
+  podScheduledAt: string | null;
+  podReadyToStartContainersAt: string | null;
+  userContainerStartedAt: string | null;
+  queueProxyStartedAt: string | null;
+  containersReadyAt: string | null;
+  podReadyAt: string | null;
+  observedLagMs: number | null;
+  createdToUserStartedMs: number | null;
+  createdToQueueProxyStartedMs: number | null;
+  createdToReadyMs: number | null;
+  userStartedToReadyMs: number | null;
+  queueProxyStartedToReadyMs: number | null;
   startupTimeMs: number | null;
   status: "ready" | "not_ready";
 };
@@ -95,16 +132,18 @@ export type PodStartupMeasurement<T extends object> = {
 const execFileAsync = promisify(execFile);
 
 export const POD_STARTUP_CSV_HEADER =
-  "run_started_at,service_name,namespace,revision_name,pod_name,pod_uid,created_at,ready_at,startup_time_ms,status";
+  "run_started_at,service_name,namespace,revision_name,pod_name,pod_uid,created_at,ready_at,startup_time_ms,status,pod_created_at,pod_first_observed_at,pod_scheduled_at,pod_ready_to_start_containers_at,user_container_started_at,queue_proxy_started_at,containers_ready_at,pod_ready_at,observed_lag_ms,created_to_user_started_ms,created_to_queue_proxy_started_ms,created_to_ready_ms,user_started_to_ready_ms,queue_proxy_started_to_ready_ms";
 export const DEFAULT_POLL_INTERVAL_MS = 500;
 export const DEFAULT_SETTLE_TIMEOUT_MS = 60_000;
+const USER_CONTAINER_NAME = "user-container";
+const QUEUE_PROXY_CONTAINER_NAME = "queue-proxy";
 
 function toCsvRow(values: Array<string | number | null>): string {
   return values.map(csvEscape).join(",");
 }
 
-function extractReadyCondition(pod: PodSnapshotItem): PodCondition | undefined {
-  return pod.status?.conditions?.find((condition) => condition.type === "Ready");
+function extractCondition(pod: PodSnapshotItem, type: string): PodCondition | undefined {
+  return pod.status?.conditions?.find((condition) => condition.type === type);
 }
 
 function isTerminalPod(pod: PodSnapshotItem): boolean {
@@ -112,7 +151,68 @@ function isTerminalPod(pod: PodSnapshotItem): boolean {
   return phase === "Failed" || phase === "Succeeded";
 }
 
-function toObservedPod(pod: PodSnapshotItem): ObservedPod | null {
+function extractConditionTime(pod: PodSnapshotItem, type: string): string | null {
+  const condition = extractCondition(pod, type);
+
+  return condition?.status === "True" && condition.lastTransitionTime
+    ? condition.lastTransitionTime
+    : null;
+}
+
+function extractContainerStatus(
+  pod: PodSnapshotItem,
+  containerName: string,
+): PodContainerStatus | undefined {
+  return pod.status?.containerStatuses?.find((status) => status.name === containerName);
+}
+
+function pickEarlierTimestamp(
+  ...timestamps: Array<string | null | undefined>
+): string | null {
+  let earliest: string | null = null;
+  let earliestMs = Number.POSITIVE_INFINITY;
+
+  for (const timestamp of timestamps) {
+    if (typeof timestamp !== "string" || timestamp.length === 0) {
+      continue;
+    }
+
+    const parsed = Date.parse(timestamp);
+
+    if (!Number.isFinite(parsed)) {
+      continue;
+    }
+
+    if (parsed < earliestMs) {
+      earliest = timestamp;
+      earliestMs = parsed;
+    }
+  }
+
+  return earliest;
+}
+
+function extractContainerStartedAt(
+  pod: PodSnapshotItem,
+  containerName: string,
+): string | null {
+  const containerStatus = extractContainerStatus(pod, containerName);
+
+  if (!containerStatus) {
+    return null;
+  }
+
+  return pickEarlierTimestamp(
+    containerStatus.state?.running?.startedAt,
+    containerStatus.state?.terminated?.startedAt,
+    containerStatus.lastState?.running?.startedAt,
+    containerStatus.lastState?.terminated?.startedAt,
+  );
+}
+
+type ObservedPodSnapshot = Omit<ObservedPod, "firstObservedAt">;
+
+function toObservedPod(pod: PodSnapshotItem): ObservedPodSnapshot | null {
   const podUid = pod.metadata?.uid;
   const podName = pod.metadata?.name;
   const createdAt = pod.metadata?.creationTimestamp;
@@ -121,18 +221,17 @@ function toObservedPod(pod: PodSnapshotItem): ObservedPod | null {
     return null;
   }
 
-  const readyCondition = extractReadyCondition(pod);
-  const readyAt =
-    readyCondition?.status === "True" && readyCondition.lastTransitionTime
-      ? readyCondition.lastTransitionTime
-      : null;
-
   return {
     podUid,
     podName,
     revisionName: pod.metadata?.labels?.["serving.knative.dev/revision"] ?? "",
     createdAt,
-    readyAt,
+    podScheduledAt: extractConditionTime(pod, "PodScheduled"),
+    podReadyToStartContainersAt: extractConditionTime(pod, "PodReadyToStartContainers"),
+    userContainerStartedAt: extractContainerStartedAt(pod, USER_CONTAINER_NAME),
+    queueProxyStartedAt: extractContainerStartedAt(pod, QUEUE_PROXY_CONTAINER_NAME),
+    containersReadyAt: extractConditionTime(pod, "ContainersReady"),
+    podReadyAt: extractConditionTime(pod, "Ready"),
     terminal: isTerminalPod(pod),
   };
 }
@@ -171,6 +270,20 @@ export function createPodStartupMetricReport(
         entry.readyAt,
         entry.startupTimeMs,
         entry.status,
+        entry.podCreatedAt,
+        entry.podFirstObservedAt,
+        entry.podScheduledAt,
+        entry.podReadyToStartContainersAt,
+        entry.userContainerStartedAt,
+        entry.queueProxyStartedAt,
+        entry.containersReadyAt,
+        entry.podReadyAt,
+        entry.observedLagMs,
+        entry.createdToUserStartedMs,
+        entry.createdToQueueProxyStartedMs,
+        entry.createdToReadyMs,
+        entry.userStartedToReadyMs,
+        entry.queueProxyStartedToReadyMs,
       ]),
     ),
     entries: [...entries],
@@ -190,7 +303,7 @@ async function listServicePods(
   serviceName: string,
   namespace: string,
   execFileLike?: ExecFileLike,
-): Promise<ObservedPod[]> {
+): Promise<ObservedPodSnapshot[]> {
   const run = execFileLike ?? ((file, args) => execFileAsync(file, [...args]));
 
   try {
@@ -206,7 +319,7 @@ async function listServicePods(
     ]);
     const parsed = JSON.parse(stdout || "{\"items\":[]}") as PodListResponse;
     const items = Array.isArray(parsed.items) ? parsed.items : [];
-    return items.map(toObservedPod).filter((pod): pod is ObservedPod => pod !== null);
+    return items.map(toObservedPod).filter((pod): pod is ObservedPodSnapshot => pod !== null);
   } catch (error: unknown) {
     throw new Error(
       `Unable to collect pod startup metrics for service ${serviceName} in namespace ${namespace}: ${parseKubectlError(error)}`,
@@ -217,8 +330,11 @@ async function listServicePods(
 function mergeObservedPods(
   observedPods: Map<string, ObservedPod>,
   baselinePodUids: ReadonlySet<string>,
-  snapshot: readonly ObservedPod[],
+  snapshot: readonly ObservedPodSnapshot[],
+  now: () => number,
 ): void {
+  let observedAt: string | null = null;
+
   for (const pod of snapshot) {
     if (baselinePodUids.has(pod.podUid)) {
       continue;
@@ -227,33 +343,51 @@ function mergeObservedPods(
     const existing = observedPods.get(pod.podUid);
 
     if (!existing) {
-      observedPods.set(pod.podUid, { ...pod });
+      observedAt ??= new Date(now()).toISOString();
+      observedPods.set(pod.podUid, { ...pod, firstObservedAt: observedAt });
       continue;
     }
 
     existing.revisionName = pod.revisionName || existing.revisionName;
-    existing.readyAt = existing.readyAt ?? pod.readyAt;
+    existing.podScheduledAt = pickEarlierTimestamp(existing.podScheduledAt, pod.podScheduledAt);
+    existing.podReadyToStartContainersAt = pickEarlierTimestamp(
+      existing.podReadyToStartContainersAt,
+      pod.podReadyToStartContainersAt,
+    );
+    existing.userContainerStartedAt = pickEarlierTimestamp(
+      existing.userContainerStartedAt,
+      pod.userContainerStartedAt,
+    );
+    existing.queueProxyStartedAt = pickEarlierTimestamp(
+      existing.queueProxyStartedAt,
+      pod.queueProxyStartedAt,
+    );
+    existing.containersReadyAt = pickEarlierTimestamp(
+      existing.containersReadyAt,
+      pod.containersReadyAt,
+    );
+    existing.podReadyAt = pickEarlierTimestamp(existing.podReadyAt, pod.podReadyAt);
     existing.terminal = existing.terminal || pod.terminal;
   }
 }
 
 function isSettled(pod: ObservedPod): boolean {
-  return pod.readyAt !== null || pod.terminal;
+  return pod.podReadyAt !== null || pod.terminal;
 }
 
-function computeStartupTimeMs(createdAt: string, readyAt: string | null): number | null {
-  if (!readyAt) {
+function computeDurationMs(startAt: string | null, endAt: string | null): number | null {
+  if (!startAt || !endAt) {
     return null;
   }
 
-  const createdAtMs = Date.parse(createdAt);
-  const readyAtMs = Date.parse(readyAt);
+  const startAtMs = Date.parse(startAt);
+  const endAtMs = Date.parse(endAt);
 
-  if (!Number.isFinite(createdAtMs) || !Number.isFinite(readyAtMs)) {
+  if (!Number.isFinite(startAtMs) || !Number.isFinite(endAtMs)) {
     return null;
   }
 
-  return Math.max(0, readyAtMs - createdAtMs);
+  return Math.max(0, endAtMs - startAtMs);
 }
 
 function finalizeEntries(
@@ -264,18 +398,36 @@ function finalizeEntries(
 ): PodStartupRow[] {
   return [...observedPods.values()]
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.podName.localeCompare(right.podName))
-    .map((pod) => ({
-      runStartedAt,
-      serviceName,
-      namespace,
-      revisionName: pod.revisionName,
-      podName: pod.podName,
-      podUid: pod.podUid,
-      createdAt: pod.createdAt,
-      readyAt: pod.readyAt,
-      startupTimeMs: computeStartupTimeMs(pod.createdAt, pod.readyAt),
-      status: pod.readyAt ? "ready" : "not_ready",
-    }));
+    .map((pod) => {
+      const createdToReadyMs = computeDurationMs(pod.createdAt, pod.podReadyAt);
+
+      return {
+        runStartedAt,
+        serviceName,
+        namespace,
+        revisionName: pod.revisionName,
+        podName: pod.podName,
+        podUid: pod.podUid,
+        createdAt: pod.createdAt,
+        readyAt: pod.podReadyAt,
+        podCreatedAt: pod.createdAt,
+        podFirstObservedAt: pod.firstObservedAt,
+        podScheduledAt: pod.podScheduledAt,
+        podReadyToStartContainersAt: pod.podReadyToStartContainersAt,
+        userContainerStartedAt: pod.userContainerStartedAt,
+        queueProxyStartedAt: pod.queueProxyStartedAt,
+        containersReadyAt: pod.containersReadyAt,
+        podReadyAt: pod.podReadyAt,
+        observedLagMs: computeDurationMs(pod.createdAt, pod.firstObservedAt),
+        createdToUserStartedMs: computeDurationMs(pod.createdAt, pod.userContainerStartedAt),
+        createdToQueueProxyStartedMs: computeDurationMs(pod.createdAt, pod.queueProxyStartedAt),
+        createdToReadyMs,
+        userStartedToReadyMs: computeDurationMs(pod.userContainerStartedAt, pod.podReadyAt),
+        queueProxyStartedToReadyMs: computeDurationMs(pod.queueProxyStartedAt, pod.podReadyAt),
+        startupTimeMs: createdToReadyMs,
+        status: pod.podReadyAt ? "ready" : "not_ready",
+      };
+    });
 }
 
 export async function measurePodStartupDuring<T extends object>(
@@ -292,7 +444,7 @@ export async function measurePodStartupDuring<T extends object>(
 
   const collectSnapshot = async () => {
     const snapshot = await listServicePods(options.serviceName, options.namespace, options.execFileLike);
-    mergeObservedPods(observedPods, baselinePodUids, snapshot);
+    mergeObservedPods(observedPods, baselinePodUids, snapshot, now);
   };
 
   let stopRequested = false;

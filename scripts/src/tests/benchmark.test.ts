@@ -75,8 +75,8 @@ async function testResolveTargetFromEnvForAllScenarioPairs(): Promise<void> {
   };
 
   for (const [runtime, strategy, serviceName] of [
-    ["go", "min0", "go-benchmark"],
-    ["go", "min1", "go-min-1"],
+    ["go", "min0", "go-benchmark-min0"],
+    ["go", "min1", "go-benchmark-min1"],
     ["node", "min0", "node-benchmark-min0"],
     ["node", "min1", "node-benchmark-min1"],
   ] as const) {
@@ -123,13 +123,13 @@ async function testRunBenchmarkDispatchAndDryRun(): Promise<void> {
       log: (message) => logs.push(message),
       resolveTarget: async () => ({
         modeUsed: "env",
-        serviceName: "go-benchmark",
+        serviceName: "go-benchmark-min0",
         serviceUrl: null,
         requestTarget: {
           hostname: "127.0.0.1",
           port: 8080,
           path: "/ping",
-          hostHeader: "go-benchmark.default.example.com",
+          hostHeader: "go-benchmark-min0.default.example.com",
           timeoutMs: 10000,
         },
       }),
@@ -152,7 +152,7 @@ async function testRunBenchmarkDispatchAndDryRun(): Promise<void> {
   assert.equal(dryRunResult.kind, "dry-run");
   assert.equal(burstCalled, false);
   assert.equal(measurementCalled, false);
-  assert.ok(logs.some((line) => line === "service_name: go-benchmark"));
+  assert.ok(logs.some((line) => line === "service_name: go-benchmark-min0"));
   assert.ok(logs.some((line) => line === `platform_results_file: ${path.join("results", "go-min0-burst_pod-startup.csv")}`));
 
   let steadyCalled = false;
