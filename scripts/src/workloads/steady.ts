@@ -71,7 +71,7 @@ export async function collectSteadyResults(
 
     const scheduledOffsetMs = index * intervalMs;
 
-    if (durationMs !== undefined && scheduledOffsetMs > durationMs) {
+    if (durationMs !== undefined && scheduledOffsetMs >= durationMs) {
       break;
     }
 

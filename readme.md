@@ -57,6 +57,8 @@ When `REQUEST_HOST` is not set, env mode derives the host header as:
 - `sporadic`: idle gap before requests after the first, controlled by `--idle-ms`
 - `steady`: sustained cadence without long idle gaps, controlled by `--interval-ms` and bounded by `--duration-ms` or `--requests`
 
+For `steady`, `--duration-ms` is treated as an exclusive upper bound. Example: `--interval-ms 1000 --duration-ms 30000` produces 30 requests, not 31.
+
 ## Direct Utilities
 
 Only the one-off request helper remains as a direct utility:
@@ -70,7 +72,23 @@ For normal workload execution, use `pnpm run benchmark -- ...`.
 ## Notes
 
 - The benchmark runner targets already-deployed Knative services. It does not own deployment/bootstrap.
-- `node-service/deploy-kind.sh` is still a separate Node-focused bootstrap path, not the generic benchmark orchestrator.
-- For verification, use:
-  - `pnpm run check:modules` for a quick module/import smoke check
-  - `pnpm test` for parser, mapping, and metrics regression tests
+- The expected deployment workflow is manual: build the image, load it into `kind`, apply the matching Knative Service manifest, wait for readiness, then run `pnpm run benchmark -- ...`.
+- For verification, use `pnpm run check:modules` for a quick module/import smoke check and `pnpm test` for parser, mapping, and metrics regression tests.
+
+## Manual Deployment Workflow
+
+The documented workflow for this repository is:
+
+```bash
+docker build -t kind.local/node-benchmark:v1 ./node-service
+kind load docker-image kind.local/node-benchmark:v1 --name kind
+kubectl apply -f node-service/node-min0.yaml
+# or:
+# kubectl apply -f node-service/node-min1.yaml
+kubectl wait --for=condition=Ready ksvc/node-benchmark-min0 --timeout=300s
+# or:
+# kubectl wait --for=condition=Ready ksvc/node-benchmark-min1 --timeout=300s
+pnpm run benchmark -- --runtime node --strategy min0 --workload burst
+```
+
+Apply the same pattern for Go with `go-service/go-min0.yaml` or `go-service/go-min1.yaml`.

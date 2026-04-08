@@ -4,9 +4,8 @@ Node.js version of the benchmark service from `go-service`.
 
 ## What gets deployed
 
-- A Node.js HTTP service with `GET /ping` and `GET /healthz`
-- A Knative Service manifest in `node-service.yaml`
-- A full deployment script for `kind` + Knative in `deploy-kind.sh`
+- A Node.js HTTP service with `GET /ping`
+- Two Knative Service manifests: `node-min0.yaml` for baseline scale-to-zero and `node-min1.yaml` for the `min-scale: 1` mitigation case
 
 ## Prerequisites
 
@@ -14,28 +13,21 @@ Node.js version of the benchmark service from `go-service`.
 - `kubectl`
 - `kind`
 
-## Full deploy to kind + Knative
+## Manual workflow
 
-Run from the repository root:
+This repository now expects a manual deployment workflow:
 
 ```bash
-chmod +x node-service/deploy-kind.sh
-./node-service/deploy-kind.sh
+docker build -t kind.local/node-benchmark:v1 ./node-service
+kind load docker-image kind.local/node-benchmark:v1 --name kind
+kubectl apply -f node-service/node-min0.yaml
+# or:
+# kubectl apply -f node-service/node-min1.yaml
 ```
 
-The script will:
+Use `node-min0.yaml` for the default scale-to-zero case and `node-min1.yaml` for the mitigation case.
 
-- create a `kind` cluster from `infra/kind.yaml` if it does not exist
-- install Knative Serving
-- install Kourier using `infra/kourier.yaml`
-- configure Knative to use Kourier
-- set `example.com` as the local no-DNS domain
-- build `kind.local/node-benchmark:v1`
-- load the image into `kind`
-- deploy `node-service/node-service.yaml`
-- print the `curl` commands for local access
-
-## Manual commands
+## Example setup commands
 
 ```bash
 kind create cluster --name kind --config infra/kind.yaml
@@ -48,15 +40,19 @@ kubectl wait --for=condition=Ready pod --all -n knative-serving --timeout=300s
 kubectl wait --for=condition=Ready pod --all -n kourier-system --timeout=300s
 docker build -t kind.local/node-benchmark:v1 ./node-service
 kind load docker-image kind.local/node-benchmark:v1 --name kind
-kubectl apply -f node-service/node-service.yaml
-kubectl wait --for=condition=Ready ksvc/node-benchmark --timeout=300s
-kubectl get ksvc node-benchmark
+kubectl apply -f node-service/node-min0.yaml
+# or:
+# kubectl apply -f node-service/node-min1.yaml
+kubectl wait --for=condition=Ready ksvc/node-benchmark-min0 --timeout=300s
+# or:
+# kubectl wait --for=condition=Ready ksvc/node-benchmark-min1 --timeout=300s
 ```
 
 After deployment:
 
 ```bash
-SERVICE_HOST=$(kubectl get ksvc node-benchmark -o jsonpath='{.status.url}' | sed 's#^http://##')
+SERVICE_HOST=$(kubectl get ksvc node-benchmark-min0 -o jsonpath='{.status.url}' | sed 's#^http://##')
+# or:
+# SERVICE_HOST=$(kubectl get ksvc node-benchmark-min1 -o jsonpath='{.status.url}' | sed 's#^http://##')
 curl -H "Host: ${SERVICE_HOST}" http://127.0.0.1:8080/ping
-curl -H "Host: ${SERVICE_HOST}" http://127.0.0.1:8080/healthz
 ```
